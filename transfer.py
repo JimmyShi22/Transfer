@@ -1,6 +1,7 @@
 import asyncore
 import socket
 import sys
+import threading
 
 mark = '[c319q]'
 
@@ -118,6 +119,7 @@ class Receiver(asyncore.dispatcher):
 
 
 class EncodeSender(Sender):
+    mutex = threading.Lock()
 
     def handle_read(self):
         read = self.recv(4096)
@@ -125,14 +127,19 @@ class EncodeSender(Sender):
         self.receiver.to_remote_buffer += decode(read)
 
     def handle_write(self):
+        self.mutex.acquire(10)
+
         self.receiver.from_remote_buffer = encode(self.receiver.from_remote_buffer)
 
         sent = self.send(self.receiver.from_remote_buffer)
         print '--> %04i' % sent
         self.receiver.from_remote_buffer = self.receiver.from_remote_buffer[sent:]
 
+        self.mutex.release()
+
 
 class EncodeReceiver(Receiver):
+    mutex = threading.Lock()
 
     def handle_read(self):
         read = self.recv(4096)
@@ -140,11 +147,15 @@ class EncodeReceiver(Receiver):
         self.from_remote_buffer += decode(read)
 
     def handle_write(self):
+        self.mutex.acquire(10)
+
         self.to_remote_buffer = encode(self.to_remote_buffer)
 
         sent = self.send(self.to_remote_buffer)
         print '%04i <--' % sent
         self.to_remote_buffer = self.to_remote_buffer[sent:]
+
+        self.mutex.release()
 
 
 def help():
@@ -157,7 +168,7 @@ if __name__ == '__main__':
     if len(sys.argv) is 2:
         if sys.argv[1] == "vps":
             local_ip = "0.0.0.0"
-            local_port = 2413
+            local_port = 2414
             to_ip = "127.0.0.1"
             to_port = 2401
 
@@ -166,9 +177,9 @@ if __name__ == '__main__':
             asyncore.loop()
         else:
             local_ip = "localhost"
-            local_port = 2401
+            local_port = 2402
             to_ip = "129.226.126.132"
-            to_port = 2413
+            to_port = 2414
 
             print "local mode: " + local_ip + ":" + str(local_port) + " => " + to_ip + ":" + str(to_port)
             LocalForwarder(local_ip, local_port, to_ip, to_port)  # local
